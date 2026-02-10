@@ -1,7 +1,7 @@
 import { DebugMonitor, type DebugViolation } from "./debug-monitor";
 import { isSourceFile } from "./heuristics";
 import { isInvestigationCommand } from "./investigation";
-import { TddMonitor, type TddViolation } from "./tdd-monitor";
+import { TddMonitor, type TddPhase, type TddViolation } from "./tdd-monitor";
 import { parseTestCommand, parseTestResult } from "./test-runner";
 
 export type Violation = TddViolation | DebugViolation;
@@ -20,7 +20,7 @@ export interface WorkflowHandler {
   getTddPhase(): string;
   getWidgetText(): string;
   getTddState(): ReturnType<TddMonitor["getState"]>;
-  restoreTddState(phase: any, testFiles: string[], sourceFiles: string[]): void;
+  restoreTddState(phase: TddPhase, testFiles: string[], sourceFiles: string[]): void;
 }
 
 export function createWorkflowHandler(): WorkflowHandler {
@@ -110,7 +110,7 @@ export function createWorkflowHandler(): WorkflowHandler {
       return tdd.getState();
     },
 
-    restoreTddState(phase: any, testFiles: string[], sourceFiles: string[]) {
+    restoreTddState(phase: TddPhase, testFiles: string[], sourceFiles: string[]) {
       tdd.setState(phase, testFiles, sourceFiles);
     },
   };

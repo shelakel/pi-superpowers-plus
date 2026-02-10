@@ -1,48 +1,46 @@
 # Phase 1 Review Issues
 
 Post-review issues from the TDD enforcement implementation (`feat/tdd-enforcement`).
-Address in Phase 2 or a follow-up patch.
 
 ---
 
 ## Important
 
-### 1. Silent source write in RED phase
-- **File:** `extensions/workflow-monitor/tdd-monitor.ts:35-36`
-- **Issue:** Writing source while in RED phase does nothing — no transition, no warning. User wrote a test (→RED), then writes source before running tests. State stays RED silently.
-- **Expected:** Either transition to REFACTOR, or emit a warning ("run your failing test before writing production code").
-- **Decision needed:** Is this strict TDD (correct) or a UX gap? Document or fix.
+### 1. ✅ Silent source write in RED phase
+- **File:** `extensions/workflow-monitor/tdd-monitor.ts`
+- **Issue:** Writing source while in RED phase did nothing — no transition, no warning.
+- **Resolution:** Added `source-during-red` violation type. Writing source during RED now triggers a TDD violation warning. (Phase 2, Task 6)
 
-### 2. Module-level pendingViolation state
-- **File:** `extensions/workflow-monitor.ts:17`
-- **Issue:** `pendingViolation` is scoped to the module closure, not the handler instance. If pi ever processes `tool_call` and `tool_result` events concurrently, violations could leak between calls.
-- **Fix:** Move into the `WorkflowHandler` interface or document the sequential-processing assumption.
+### 2. ✅ Module-level pendingViolation state
+- **File:** `extensions/workflow-monitor.ts`
+- **Issue:** `pendingViolation` was scoped to module closure with loose type `{ type: string; file: string }`.
+- **Resolution:** Now properly typed as `Violation | null` (union of `TddViolation | DebugViolation`). Sequential processing assumption documented in comment. (Phase 2, Task 5)
 
-### 3. Package root discovery fragility
-- **File:** `extensions/workflow-monitor/reference-tool.ts:25-33`
-- **Issue:** `getPackageRoot()` walks up directories looking for `package.json`. May resolve to the wrong root in monorepos or when the package is installed as a dependency.
-- **Fix:** Accept an explicit root path at init time, or resolve relative to `import.meta.url` with a known depth.
+### 3. ✅ Package root discovery fragility
+- **File:** `extensions/workflow-monitor/reference-tool.ts`
+- **Issue:** `getPackageRoot()` walked up directories looking for `package.json`.
+- **Resolution:** Replaced with `import.meta.url`-based resolution at known depth. Removed `accessSync` import and `getPackageRoot()` function. (Phase 2, Task 7)
 
-### 4. Duplicate regex pattern in heuristics
+### 4. Duplicate regex pattern in heuristics (deferred)
 - **File:** `extensions/workflow-monitor/heuristics.ts:3,7`
-- **Issue:** `TEST_PATTERNS` includes both `/^tests?\//` (matches `test/` or `tests/` at start) and `/\/tests?\//` (matches `/test/` or `/tests/` mid-path). The first is not redundant but the coverage overlaps. Worth consolidating.
-- **Fix:** Merge into a single pattern or document why both are needed.
+- **Issue:** `TEST_PATTERNS` has overlapping patterns for test directories.
+- **Status:** Low priority, patterns work correctly. Deferred.
 
 ---
 
 ## Minor
 
-### 5. Generic pass pattern false positives
+### 5. Generic pass pattern false positives (deferred)
 - **File:** `extensions/workflow-monitor/test-runner.ts:22`
-- **Issue:** `/\bpassed\b/i` matches any output containing "passed" — could false-positive on non-test command output (e.g., "all checks passed").
-- **Mitigation:** Only evaluated when `parseTestCommand` already matched, so risk is low. Consider tightening patterns later.
+- **Issue:** `/\bpassed\b/i` could false-positive on non-test output.
+- **Status:** Only evaluated when `parseTestCommand` matched. Low risk. Deferred.
 
-### 6. No state persistence across sessions
-- **File:** `extensions/workflow-monitor.ts:29-35`
-- **Issue:** TDD monitor resets to idle on every session event. Long-running TDD cycles that span session switches lose state.
-- **Fix:** Persist TDD state in tool result details (like plan-tracker does) and reconstruct on session events.
+### 6. No state persistence across sessions (deferred)
+- **File:** `extensions/workflow-monitor.ts`
+- **Issue:** TDD/debug monitors reset on session events.
+- **Status:** Acceptable for now. Deferred.
 
-### 7. Loose type on warning function
-- **File:** `extensions/workflow-monitor/warnings.ts:3`
-- **Issue:** `getTddViolationWarning(type: string, ...)` accepts any string but only handles `"source-before-test"`. Should use a discriminated union.
-- **Fix:** `type: TddViolation["type"]` or a string literal union.
+### 7. ✅ Loose type on warning function
+- **File:** `extensions/workflow-monitor/warnings.ts`
+- **Issue:** `getTddViolationWarning(type: string, ...)` accepted any string.
+- **Resolution:** Now uses `TddViolationType` (`"source-before-test" | "source-during-red"`). Added separate `getDebugViolationWarning` with `DebugViolationType`. (Phase 2, Tasks 3 & 6)
