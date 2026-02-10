@@ -10,15 +10,23 @@ Based on [pi-superpowers](https://github.com/coctostan/pi-superpowers) (itself a
 
 ## Install
 
+From npm:
+
+```bash
+pi install npm:pi-superpowers-plus
+```
+
+Or from git:
+
 ```bash
 pi install git:github.com/coctostan/pi-superpowers-plus
 ```
 
-Or add to `.pi/settings.json` (project-level) or `~/.pi/agent/settings.json` (global):
+Or add to `.pi/settings.json` (project-level) or `~/.pi/agent/config.json` (global):
 
 ```json
 {
-  "packages": ["git:github.com/coctostan/pi-superpowers-plus"]
+  "packages": ["npm:pi-superpowers-plus"]
 }
 ```
 
@@ -32,6 +40,7 @@ Or add to `.pi/settings.json` (project-level) or `~/.pi/agent/settings.json` (gl
 | **Reference tool** | Everything in SKILL.md (373 lines) | Lean skill (110 lines) + on-demand `workflow_reference` tool |
 | **Plan tracker** | ✓ | ✓ (unchanged) |
 | **Debug enforcement** | Manual discipline | Extension escalates debug warnings after repeated non-TDD failures |
+| **Verification gating** | — | Blocks commit/push/PR until verification passes |
 
 ## Extensions
 
@@ -56,6 +65,11 @@ Color-coded: red for RED, green for GREEN, accent for REFACTOR. Hidden when idle
 - Debug mode activates only after **2 consecutive failing test runs**
 - The first failing test run immediately after writing a new test (intentional TDD RED verification) is excluded
 - When debug mode is active, write-time warnings enforce investigation-first behavior
+
+**Verification Gating:**
+- Blocks `git commit`, `git push`, and PR creation when verification hasn't passed
+- Requires the agent to run `verification-before-completion` and get a passing result before shipping
+- Automatically clears the gate after successful verification
 
 **Reference Tool:**
 The `workflow_reference` tool serves extracted TDD reference content on demand, keeping the skill file lean while making detailed guidance available when needed:
@@ -137,7 +151,10 @@ pi-superpowers-plus/
 │       ├── test-runner.ts           # Test command/result detection
 │       ├── warnings.ts              # Violation warning content
 │       ├── workflow-handler.ts      # Testable core logic
-│       └── reference-tool.ts        # On-demand reference loading
+│       ├── reference-tool.ts        # On-demand reference loading
+│       ├── debug-monitor.ts         # Debug mode escalation
+│       ├── investigation.ts         # Investigation tracking
+│       └── verification-monitor.ts  # Commit/push/PR gating
 ├── skills/
 │   ├── test-driven-development/
 │   │   ├── SKILL.md                 # Lean TDD skill (110 lines)
@@ -148,7 +165,7 @@ pi-superpowers-plus/
 │   │       └── when-stuck.md
 │   └── .../                         # 11 other workflow skills
 └── tests/
-    └── extension/workflow-monitor/   # 127 unit tests
+    └── extension/workflow-monitor/   # 151 unit tests
 ```
 
 ## Development
