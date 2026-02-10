@@ -64,18 +64,22 @@ describe("WorkflowHandler", () => {
 
   // --- Debug monitor integration ---
 
-  test("activates debug mode on test failure", () => {
+  test("activates debug mode on second consecutive test failure", () => {
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
+    expect(handler.isDebugActive()).toBe(false);
     handler.handleBashResult("npx vitest run", "1 failing", 1);
     expect(handler.isDebugActive()).toBe(true);
   });
 
-  test("detects fix-without-investigation on source write after test failure", () => {
+  test("detects fix-without-investigation on source write after debug is active", () => {
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleBashResult("npx vitest run", "1 failing", 1);
     const result = handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "a", newText: "b" });
     expect(result.violation?.type).toBe("fix-without-investigation");
   });
 
   test("no debug violation when investigated first", () => {
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     const result = handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "a", newText: "b" });
@@ -84,28 +88,35 @@ describe("WorkflowHandler", () => {
 
   test("no debug violation when investigation bash command used", () => {
     handler.handleBashResult("npx vitest run", "1 failing", 1);
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleBashInvestigation("grep -rn 'error' src/");
     const result = handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "a", newText: "b" });
     expect(result.violation).toBeNull();
   });
 
   test("tracks fix attempts across cycles", () => {
-    handler.handleBashResult("npx vitest run", "1 failing", 1); // initial fail
+    handler.handleBashResult("npx vitest run", "1 failing", 1); // streak=1, inactive
+    handler.handleBashResult("npx vitest run", "1 failing", 1); // streak=2, active
+
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "a", newText: "b" });
     handler.handleBashResult("npx vitest run", "1 failing", 1); // attempt 1
+
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "b", newText: "c" });
     handler.handleBashResult("npx vitest run", "1 failing", 1); // attempt 2
+
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "c", newText: "d" });
     handler.handleBashResult("npx vitest run", "1 failing", 1); // attempt 3
+
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     const result = handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "d", newText: "e" });
     expect(result.violation?.type).toBe("excessive-fix-attempts");
   });
 
   test("debug resets on test pass", () => {
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleReadOrInvestigation("read", "src/foo.ts");
     handler.handleToolCall("edit", { path: "src/foo.ts", oldText: "a", newText: "b" });
@@ -115,12 +126,100 @@ describe("WorkflowHandler", () => {
 
   test("debug resets on commit", () => {
     handler.handleBashResult("npx vitest run", "1 failing", 1);
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     handler.handleBashResult("git commit -m 'fix'", "", 0);
+    expect(handler.isDebugActive()).toBe(false);
+  });
+
+  test("resetState clears both debug and tdd state", () => {
+    handler.handleToolCall("write", { path: "src/utils.test.ts", content: "test" });
+    handler.handleBashResult("npx vitest run", "1 failing", 1); // excluded RED verification
+    handler.handleBashResult("npx vitest run", "1 failing", 1); // streak 1
+    handler.handleBashResult("npx vitest run", "1 failing", 1); // streak 2 -> active
+    expect(handler.getTddPhase()).toBe("red");
+    expect(handler.isDebugActive()).toBe(true);
+
+    handler.resetState();
+
+    expect(handler.getTddPhase()).toBe("idle");
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     expect(handler.isDebugActive()).toBe(false);
   });
 
   test("widget shows debug state when active", () => {
     handler.handleBashResult("npx vitest run", "1 failing", 1);
+    handler.handleBashResult("npx vitest run", "1 failing", 1);
     expect(handler.getWidgetText()).toContain("Debug");
+  });
+});
+
+function failOutput() {
+  return "FAIL  tests/example.test.ts\n";
+}
+
+function passOutput() {
+  return "1 passed\n";
+}
+
+describe("WorkflowHandler (debug threshold + TDD exclusion)", () => {
+  test("does not activate debug on first non-TDD failing test run", () => {
+    const handler = createWorkflowHandler();
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+
+    expect(handler.isDebugActive()).toBe(false);
+  });
+
+  test("activates debug on second consecutive non-TDD failing test run", () => {
+    const handler = createWorkflowHandler();
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(true);
+  });
+
+  test("resets debug streak and deactivates debug on passing test run", () => {
+    const handler = createWorkflowHandler();
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(true);
+
+    handler.handleBashResult("npx vitest run", passOutput(), 0);
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+  });
+
+  test("resets debug streak on git commit", () => {
+    const handler = createWorkflowHandler();
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult('git commit -m "wip"', "", 0);
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+  });
+
+  test("TDD exclusion: first failing run after writing a test does not contribute to debug activation", () => {
+    const handler = createWorkflowHandler();
+
+    handler.handleToolCall("write", { path: "tests/new-behavior.test.ts" });
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(false);
+
+    handler.handleBashResult("npx vitest run", failOutput(), 1);
+    expect(handler.isDebugActive()).toBe(true);
   });
 });

@@ -31,6 +31,7 @@ Or add to `.pi/settings.json` (project-level) or `~/.pi/agent/settings.json` (gl
 | **TDD widget** | — | TUI widget shows RED → GREEN → REFACTOR phase |
 | **Reference tool** | Everything in SKILL.md (373 lines) | Lean skill (110 lines) + on-demand `workflow_reference` tool |
 | **Plan tracker** | ✓ | ✓ (unchanged) |
+| **Debug enforcement** | Manual discipline | Extension escalates debug warnings after repeated non-TDD failures |
 
 ## Extensions
 
@@ -50,6 +51,11 @@ Shows the current phase in the TUI status bar:
 TDD: RED
 ```
 Color-coded: red for RED, green for GREEN, accent for REFACTOR. Hidden when idle.
+
+**Debug Enforcement:**
+- Debug mode activates only after **2 consecutive failing test runs**
+- The first failing test run immediately after writing a new test (intentional TDD RED verification) is excluded
+- When debug mode is active, write-time warnings enforce investigation-first behavior
 
 **Reference Tool:**
 The `workflow_reference` tool serves extracted TDD reference content on demand, keeping the skill file lean while making detailed guidance available when needed:
@@ -142,7 +148,7 @@ pi-superpowers-plus/
 │   │       └── when-stuck.md
 │   └── .../                         # 11 other workflow skills
 └── tests/
-    └── extension/workflow-monitor/   # 66 unit tests
+    └── extension/workflow-monitor/   # 127 unit tests
 ```
 
 ## Development

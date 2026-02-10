@@ -32,7 +32,8 @@ export default function (pi: ExtensionAPI) {
     "session_tree",
   ] as const) {
     pi.on(event, async (_event, ctx) => {
-      handler.restoreTddState("idle", [], []);
+      handler.resetState();
+      pendingViolation = null;
       updateWidget(ctx);
     });
   }

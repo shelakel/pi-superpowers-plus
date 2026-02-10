@@ -18,3 +18,7 @@
 | 14 | Plan Tracker Extension | ✅ complete |
 | 15 | Write README | ✅ complete |
 | 16 | Remove Stubs and Final Verification | ✅ complete |
+| 17 | Phase 1: TDD Enforcement Hardening | ✅ complete |
+| 18 | Phase 2: Debug Monitor | ✅ complete |
+| 19 | Phase 3: Debug Semantics + TDD Conflict Resolution | ✅ complete |
+| 20 | Branch-Finish Review Hardening (lifecycle reset + tests) | ✅ complete |

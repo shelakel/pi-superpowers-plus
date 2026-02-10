@@ -20,12 +20,19 @@ export interface WorkflowHandler {
   getTddPhase(): string;
   getWidgetText(): string;
   getTddState(): ReturnType<TddMonitor["getState"]>;
-  restoreTddState(phase: TddPhase, testFiles: string[], sourceFiles: string[]): void;
+  restoreTddState(
+    phase: TddPhase,
+    testFiles: string[],
+    sourceFiles: string[],
+    redVerificationPending?: boolean
+  ): void;
+  resetState(): void;
 }
 
 export function createWorkflowHandler(): WorkflowHandler {
   const tdd = new TddMonitor();
   const debug = new DebugMonitor();
+  let debugFailStreak = 0;
 
   return {
     handleToolCall(toolName: string, input: Record<string, any>): ToolCallResult {
@@ -58,6 +65,7 @@ export function createWorkflowHandler(): WorkflowHandler {
       }
 
       if (/\bgit\s+commit\b/.test(command)) {
+        debugFailStreak = 0;
         tdd.onCommit();
         debug.onCommit();
         return;
@@ -66,9 +74,20 @@ export function createWorkflowHandler(): WorkflowHandler {
       if (parseTestCommand(command)) {
         const passed = parseTestResult(output, exitCode);
         if (passed !== null) {
+          const excludeFromDebug =
+            !passed && tdd.getPhase() === "red" && tdd.isRedVerificationPending();
+
           tdd.onTestResult(passed);
-          if (passed) debug.onTestPassed();
-          else debug.onTestFailed();
+
+          if (passed) {
+            debugFailStreak = 0;
+            debug.onTestPassed();
+          } else if (!excludeFromDebug) {
+            debugFailStreak += 1;
+            if (debugFailStreak >= 2) {
+              debug.onTestFailed();
+            }
+          }
         }
       }
     },
@@ -110,8 +129,19 @@ export function createWorkflowHandler(): WorkflowHandler {
       return tdd.getState();
     },
 
-    restoreTddState(phase: TddPhase, testFiles: string[], sourceFiles: string[]) {
-      tdd.setState(phase, testFiles, sourceFiles);
+    restoreTddState(
+      phase: TddPhase,
+      testFiles: string[],
+      sourceFiles: string[],
+      redVerificationPending = false
+    ) {
+      tdd.setState(phase, testFiles, sourceFiles, redVerificationPending);
+    },
+
+    resetState() {
+      debugFailStreak = 0;
+      tdd.onCommit();
+      debug.onCommit();
     },
   };
 }
