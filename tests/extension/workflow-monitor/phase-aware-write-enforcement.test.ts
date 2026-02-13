@@ -268,7 +268,7 @@ describe("phase-aware file write enforcement", () => {
         setWidget: () => {},
         select: async (_title: string, options: string[]) => {
           promptCount += 1;
-          expect(options).toEqual(["Yes, continue", "No, stop"]);
+          expect(options).toEqual(["Yes, continue", "Yes, allow all for this session", "No, stop"]);
           return "No, stop";
         },
         setEditorText: () => {},
