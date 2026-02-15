@@ -39,9 +39,9 @@ Outstanding code review items from v0.2.0 are tracked as tech debt in v0.3.0 bel
 
 The "safe for strangers to rely on" release. Security fixes, resilient subagent lifecycle, state that survives across sessions, and tech debt cleanup from v0.2.0.
 
-### Biome Lint Cleanup
+### Biome Lint Cleanup ✅
 
-**[maintainer]** Fix the ~166 biome warnings remaining after the initial format pass. Almost all are auto-fixable style issues (e.g. `useTemplate` — string concatenation → template literals). Run `biome check --write` and verify nothing breaks, or selectively disable rules that don't add value.
+**[maintainer]** ~~Fix the ~166 biome warnings remaining after the initial format pass.~~ Done in cleanup sprint — 0 warnings remaining. Auto-fixed template literals/assertions, suppressed `noExplicitAny` at SDK boundaries, added biome.json test overrides.
 
 ### Code Review Debt
 
@@ -58,10 +58,17 @@ The "safe for strangers to rely on" release. Security fixes, resilient subagent 
 6. Duplicated logger mock setup across 3 test files — extract to shared utility
 
 **From phase 2 code review** (`docs/plans/2026-02-10-phase2-code-review-findings.md`):
-7. TDD `source-during-red` false-positives during legitimate RED→GREEN work — need to distinguish "test written but not run" from "tests failing"
-8. DebugMonitor conflicts with normal TDD — debug mode activates on any failed test, including intentional RED
-9. Investigation detection misses common non-bash tools (grep, find, ls via tool calls)
-10. "Excessive fix attempts" off-by-one in warning count/wording
+7. ~~TDD `source-during-red` false-positives during legitimate RED→GREEN work~~ ✅ Fixed — added `red-pending` phase to distinguish "test written but not run" from "tests failing"
+8. ~~DebugMonitor conflicts with normal TDD~~ ✅ Fixed — debug monitor only activates when TDD phase is `idle`
+9. ~~Investigation detection misses common non-bash tools~~ ✅ Fixed — added `isInvestigationToolCall()` for LSP, kota, and web search tools
+10. ~~"Excessive fix attempts" off-by-one in warning count/wording~~ ✅ Fixed — counter now shows "N failed fix attempts" instead of "fix attempt #N"
+
+### Cleanup Sprint Follow-ups
+
+**[maintainer]** Architectural notes from the v0.3.0 cleanup sprint code review (`v0.3.0/cleanup-sprint` branch):
+
+1. **Debug activation reads TDD phase after mutation** — In `workflow-handler.ts`, `tdd.getPhase()` is called *after* `tdd.onTestResult()` has already changed the phase. Should snapshot the phase before the mutation. No current bug (only commit transitions to idle), but fragile under future changes.
+2. **`isRedVerificationPending()` and `redVerificationPending` flag are partially redundant** — With `red-pending` as an explicit phase, the boolean flag duplicates information already encoded in the phase. The flag is still used in state persistence (`setState`/`getState`), so removal requires careful refactoring. Candidate for the Workflow Monitor Refactor in v0.4.0.
 
 ### Security Audit
 
