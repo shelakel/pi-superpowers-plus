@@ -27,6 +27,7 @@ import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import { getSubagentConcurrency, Semaphore } from "./concurrency.js";
 import { buildSubagentEnv } from "./env.js";
 import { ProcessTracker } from "./lifecycle.js";
+import { getPiSpawnCommand } from "./pi-spawn.js";
 import { getSubagentTimeoutMs } from "./timeout.js";
 
 const MAX_PARALLEL_TASKS = 8;
@@ -288,7 +289,11 @@ async function runSingleAgent(
   }
 
   const args: string[] = ["--mode", "json", "-p", "--no-session"];
-  if (agent.model) args.push("--model", agent.model);
+  // model: "inherit" (or "auto") means use the parent's current model — skip the flag
+  // so the child pi picks up whatever the user has selected.
+  if (agent.model && agent.model !== "inherit" && agent.model !== "auto") {
+    args.push("--model", agent.model);
+  }
   if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
   if (agent.extensions) {
     for (const ext of agent.extensions) {
@@ -362,11 +367,13 @@ async function runSingleAgent(
     let wasAborted = false;
 
     const exitCode = await new Promise<number>((resolve) => {
-      const proc = spawn("pi", args, {
+      const spawnSpec = getPiSpawnCommand(args);
+      const proc = spawn(spawnSpec.command, spawnSpec.args, {
         cwd: resolvedCwd,
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
         env: buildSubagentEnv(tddViolationsPath ? { PI_TDD_GUARD_VIOLATIONS_FILE: tddViolationsPath } : undefined),
+        windowsHide: true,
       });
       processTracker.add(proc);
       let buffer = "";
@@ -551,8 +558,8 @@ const ChainItem = Type.Object({
 });
 
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
-  description: 'Which agent directories to use. Default: "user". Use "both" to include project-local agents.',
-  default: "user",
+  description: 'Which agent directories to use. Default: "both" (user + project-local agents).',
+  default: "both",
 });
 
 const SubagentParams = Type.Object({
@@ -561,9 +568,7 @@ const SubagentParams = Type.Object({
   tasks: Type.Optional(Type.Array(TaskItem, { description: "Array of {agent, task} for parallel execution" })),
   chain: Type.Optional(Type.Array(ChainItem, { description: "Array of {agent, task} for sequential execution" })),
   agentScope: Type.Optional(AgentScopeSchema),
-  confirmProjectAgents: Type.Optional(
-    Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
-  ),
+
   cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
 });
 
@@ -579,17 +584,15 @@ export default function (pi: ExtensionAPI) {
     description: [
       "Delegate tasks to specialized subagents with isolated context.",
       "Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-      'Default agent scope is "user" (from ~/.pi/agent/agents).',
-      'To enable project-local agents in .pi/agents, set agentScope: "both" (or "project").',
+      'Default agent scope is "both" (user agents from ~/.pi/agent/agents + project agents from .pi/agents).',
+      'Use agentScope: "user" to restrict to user-level agents only, or "project" for project-local only.',
     ].join(" "),
     parameters: SubagentParams,
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const agentScope: AgentScope = params.agentScope ?? "user";
+      const agentScope: AgentScope = params.agentScope ?? "both";
       const discovery = discoverAgents(ctx.cwd, agentScope);
       const agents = discovery.agents;
-      const confirmProjectAgents = params.confirmProjectAgents ?? true;
-
       const hasChain = (params.chain?.length ?? 0) > 0;
       const hasTasks = (params.tasks?.length ?? 0) > 0;
       const hasSingle = Boolean(params.agent && params.task);
@@ -615,31 +618,6 @@ export default function (pi: ExtensionAPI) {
           ],
           details: makeDetails("single")([]),
         };
-      }
-
-      if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {
-        const requestedAgentNames = new Set<string>();
-        if (params.chain) for (const step of params.chain) requestedAgentNames.add(step.agent);
-        if (params.tasks) for (const t of params.tasks) requestedAgentNames.add(t.agent);
-        if (params.agent) requestedAgentNames.add(params.agent);
-
-        const projectAgentsRequested = Array.from(requestedAgentNames)
-          .map((name) => agents.find((a) => a.name === name))
-          .filter((a): a is AgentConfig => a?.source === "project");
-
-        if (projectAgentsRequested.length > 0) {
-          const names = projectAgentsRequested.map((a) => a.name).join(", ");
-          const dir = discovery.projectAgentsDir ?? "(unknown)";
-          const ok = await ctx.ui.confirm(
-            "Run project-local agents?",
-            `Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
-          );
-          if (!ok)
-            return {
-              content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
-              details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]),
-            };
-        }
       }
 
       if (params.chain && params.chain.length > 0) {
@@ -829,7 +807,7 @@ export default function (pi: ExtensionAPI) {
     },
 
     renderCall(args, theme) {
-      const scope: AgentScope = args.agentScope ?? "user";
+      const scope: AgentScope = args.agentScope ?? "both";
       if (args.chain && args.chain.length > 0) {
         let text =
           theme.fg("toolTitle", theme.bold("subagent ")) +
