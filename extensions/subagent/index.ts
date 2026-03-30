@@ -567,9 +567,7 @@ const SubagentParams = Type.Object({
   tasks: Type.Optional(Type.Array(TaskItem, { description: "Array of {agent, task} for parallel execution" })),
   chain: Type.Optional(Type.Array(ChainItem, { description: "Array of {agent, task} for sequential execution" })),
   agentScope: Type.Optional(AgentScopeSchema),
-  confirmProjectAgents: Type.Optional(
-    Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
-  ),
+
   cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
 });
 
@@ -594,8 +592,6 @@ export default function (pi: ExtensionAPI) {
       const agentScope: AgentScope = params.agentScope ?? "both";
       const discovery = discoverAgents(ctx.cwd, agentScope);
       const agents = discovery.agents;
-      const confirmProjectAgents = params.confirmProjectAgents ?? true;
-
       const hasChain = (params.chain?.length ?? 0) > 0;
       const hasTasks = (params.tasks?.length ?? 0) > 0;
       const hasSingle = Boolean(params.agent && params.task);
@@ -621,31 +617,6 @@ export default function (pi: ExtensionAPI) {
           ],
           details: makeDetails("single")([]),
         };
-      }
-
-      if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {
-        const requestedAgentNames = new Set<string>();
-        if (params.chain) for (const step of params.chain) requestedAgentNames.add(step.agent);
-        if (params.tasks) for (const t of params.tasks) requestedAgentNames.add(t.agent);
-        if (params.agent) requestedAgentNames.add(params.agent);
-
-        const projectAgentsRequested = Array.from(requestedAgentNames)
-          .map((name) => agents.find((a) => a.name === name))
-          .filter((a): a is AgentConfig => a?.source === "project");
-
-        if (projectAgentsRequested.length > 0) {
-          const names = projectAgentsRequested.map((a) => a.name).join(", ");
-          const dir = discovery.projectAgentsDir ?? "(unknown)";
-          const ok = await ctx.ui.confirm(
-            "Run project-local agents?",
-            `Agents: ${names}\nSource: ${dir}\n\nProject agents are repo-controlled. Only continue for trusted repositories.`,
-          );
-          if (!ok)
-            return {
-              content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
-              details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]),
-            };
-        }
       }
 
       if (params.chain && params.chain.length > 0) {
