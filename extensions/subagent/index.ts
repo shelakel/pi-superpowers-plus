@@ -373,6 +373,7 @@ async function runSingleAgent(
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
         env: buildSubagentEnv(tddViolationsPath ? { PI_TDD_GUARD_VIOLATIONS_FILE: tddViolationsPath } : undefined),
+        windowsHide: true,
       });
       processTracker.add(proc);
       let buffer = "";
