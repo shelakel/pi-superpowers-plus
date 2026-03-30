@@ -27,6 +27,7 @@ import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import { getSubagentConcurrency, Semaphore } from "./concurrency.js";
 import { buildSubagentEnv } from "./env.js";
 import { ProcessTracker } from "./lifecycle.js";
+import { getPiSpawnCommand } from "./pi-spawn.js";
 import { getSubagentTimeoutMs } from "./timeout.js";
 
 const MAX_PARALLEL_TASKS = 8;
@@ -288,7 +289,11 @@ async function runSingleAgent(
   }
 
   const args: string[] = ["--mode", "json", "-p", "--no-session"];
-  if (agent.model) args.push("--model", agent.model);
+  // model: "inherit" (or "auto") means use the parent's current model — skip the flag
+  // so the child pi picks up whatever the user has selected.
+  if (agent.model && agent.model !== "inherit" && agent.model !== "auto") {
+    args.push("--model", agent.model);
+  }
   if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
   if (agent.extensions) {
     for (const ext of agent.extensions) {
@@ -362,7 +367,8 @@ async function runSingleAgent(
     let wasAborted = false;
 
     const exitCode = await new Promise<number>((resolve) => {
-      const proc = spawn("pi", args, {
+      const spawnSpec = getPiSpawnCommand(args);
+      const proc = spawn(spawnSpec.command, spawnSpec.args, {
         cwd: resolvedCwd,
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
@@ -551,8 +557,8 @@ const ChainItem = Type.Object({
 });
 
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
-  description: 'Which agent directories to use. Default: "user". Use "both" to include project-local agents.',
-  default: "user",
+  description: 'Which agent directories to use. Default: "both" (user + project-local agents).',
+  default: "both",
 });
 
 const SubagentParams = Type.Object({
@@ -579,13 +585,13 @@ export default function (pi: ExtensionAPI) {
     description: [
       "Delegate tasks to specialized subagents with isolated context.",
       "Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-      'Default agent scope is "user" (from ~/.pi/agent/agents).',
-      'To enable project-local agents in .pi/agents, set agentScope: "both" (or "project").',
+      'Default agent scope is "both" (user agents from ~/.pi/agent/agents + project agents from .pi/agents).',
+      'Use agentScope: "user" to restrict to user-level agents only, or "project" for project-local only.',
     ].join(" "),
     parameters: SubagentParams,
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const agentScope: AgentScope = params.agentScope ?? "user";
+      const agentScope: AgentScope = params.agentScope ?? "both";
       const discovery = discoverAgents(ctx.cwd, agentScope);
       const agents = discovery.agents;
       const confirmProjectAgents = params.confirmProjectAgents ?? true;
@@ -829,7 +835,7 @@ export default function (pi: ExtensionAPI) {
     },
 
     renderCall(args, theme) {
-      const scope: AgentScope = args.agentScope ?? "user";
+      const scope: AgentScope = args.agentScope ?? "both";
       if (args.chain && args.chain.length > 0) {
         let text =
           theme.fg("toolTitle", theme.bold("subagent ")) +
