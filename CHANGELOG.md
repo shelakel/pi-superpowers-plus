@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows subagent spawn** — `spawn("pi", ...)` with `shell: false` fails on Windows because there is no `pi.exe`, only a `.cmd` shim. The new `pi-spawn` module resolves the JS entry point and spawns `node <path>` directly on Windows, while keeping `spawn("pi", ...)` on other platforms.
+- **Windows console window** — added `windowsHide: true` to prevent a visible console window popping up on every subagent spawn.
+- **Windows env vars** — `buildSubagentEnv` now passes the full `process.env` (like pi's own subagent spawn), ensuring bash and other tools can resolve correctly.
+- **Default agent scope** — changed from `"user"` to `"both"` so project-local agents in `.pi/agents` are discovered by default.
+- **Model: "inherit"** — `model: "inherit"` (or `"auto"`) no longer passes `--model` to the child pi, letting it pick up the user's current model selection.
+
 ### Removed
 
 - **`tdd-guard` extension** — TDD enforcement is now handled via runtime warnings in `workflow-monitor` and three-scenario TDD instructions embedded in agent profiles and skill text. Agent profiles no longer need `extensions: ../extensions/tdd-guard.ts` in their frontmatter.
