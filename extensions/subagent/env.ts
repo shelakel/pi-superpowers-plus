@@ -16,6 +16,16 @@ const ALLOWED_EXPLICIT = new Set([
   "NO_COLOR",
   "LANG",
   "LANGUAGE",
+  // Windows: needed by pi to locate Git Bash (shell resolution)
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "AppData",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "SystemDrive",
+  "COMSPEC",
+  "OS",
+  "PROCESSOR_ARCHITECTURE",
 ]);
 
 export function buildSubagentEnv(extra?: Record<string, string>): Record<string, string | undefined> {
