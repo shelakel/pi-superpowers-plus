@@ -91,21 +91,62 @@ You are an agent with an empty extensions field.
     expect(agents[0].extensions).toBeUndefined();
   });
 
-  test("extensions with extra whitespace around paths are trimmed", () => {
+  test("extensions as YAML array are parsed correctly", () => {
     writeAgent(
       tmpDir,
-      "whitespace-agent",
+      "yaml-array-ext-agent",
       `---
-name: whitespace-agent
-description: Agent with whitespace in extensions
-extensions:  ../extensions/ext-a.ts ,  ../extensions/ext-b.ts 
+name: yaml-array-ext-agent
+description: Agent with extensions as YAML array
+extensions:
+  - ../extensions/ext-a.ts
+  - ../extensions/ext-b.ts
 ---
-You are a trimmed agent.
+You are a YAML array extensions agent.
+`,
+    );
+
+    const agents = loadAgentsFromDir(tmpDir, "project");
+    expect(agents).toHaveLength(1);
+    expect(agents[0].extensions).toEqual(["../extensions/ext-a.ts", "../extensions/ext-b.ts"]);
+  });
+
+  test("tools as YAML array are parsed correctly", () => {
+    writeAgent(
+      tmpDir,
+      "yaml-array-tools-agent",
+      `---
+name: yaml-array-tools-agent
+description: Agent with tools as YAML array
+tools:
+  - read
+  - write
+  - edit
+---
+You are a YAML array tools agent.
 `,
     );
 
     const agents = loadAgentsFromDir(tmpDir, "user");
     expect(agents).toHaveLength(1);
-    expect(agents[0].extensions).toEqual(["../extensions/ext-a.ts", "../extensions/ext-b.ts"]);
+    expect(agents[0].tools).toEqual(["read", "write", "edit"]);
+  });
+
+  test("tools as comma-separated string are parsed correctly", () => {
+    writeAgent(
+      tmpDir,
+      "string-tools-agent",
+      `---
+name: string-tools-agent
+description: Agent with tools as comma-separated string
+tools: read, write, edit
+---
+You are a string tools agent.
+`,
+    );
+
+    const agents = loadAgentsFromDir(tmpDir, "user");
+    expect(agents).toHaveLength(1);
+    expect(agents[0].tools).toEqual(["read", "write", "edit"]);
   });
 });
