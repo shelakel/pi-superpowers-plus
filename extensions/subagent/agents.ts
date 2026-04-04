@@ -61,14 +61,16 @@ export function loadAgentsFromDir(dir: string, source: "user" | "project"): Agen
       continue;
     }
 
-    const tools = frontmatter.tools
-      ?.split(",")
-      .map((t: string) => t.trim())
-      .filter(Boolean);
-    const extensions = frontmatter.extensions
-      ?.split(",")
-      .map((t: string) => t.trim())
-      .filter(Boolean);
+    // Handle both YAML arrays and comma-separated strings for tools/extensions
+    const parseTools = (value: unknown): string[] | undefined => {
+      if (!value) return undefined;
+      if (Array.isArray(value)) return value.map(String).filter(Boolean);
+      if (typeof value === "string") return value.split(",").map((t) => t.trim()).filter(Boolean);
+      return undefined;
+    };
+
+    const tools = parseTools(frontmatter.tools);
+    const extensions = parseTools(frontmatter.extensions);
 
     agents.push({
       name: frontmatter.name,

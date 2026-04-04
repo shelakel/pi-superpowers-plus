@@ -2,7 +2,6 @@
 name: implementer
 description: Implement tasks via TDD and commit small changes
 tools: read, write, edit, bash, lsp
-model: claude-sonnet-4-5
 ---
 
 You are an implementation subagent.
